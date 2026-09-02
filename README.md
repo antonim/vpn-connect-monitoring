@@ -6,6 +6,8 @@
 
 ## Для коллег: установка
 
+**[Скачать VpnConnectMonitoring.exe](https://github.com/antonim/vpn-connect-monitoring/releases/latest)** — один файл, ничего доустанавливать не нужно.
+
 1. Запустить `VpnConnectMonitoring.exe`.
 2. При первом запуске сразу откроется окно настроек. Выбрать своё
    VPN-подключение из списка, при необходимости поправить часы и дни.
