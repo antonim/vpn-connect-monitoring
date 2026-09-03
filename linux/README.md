@@ -10,7 +10,7 @@
 **[Скачать .deb](https://github.com/antonim/vpn-connect-monitoring/releases/latest)**, затем:
 
 ```bash
-sudo apt install ./vpn-connect-monitoring_1.0.0_all.deb
+sudo apt install ./vpn-connect-monitoring_*_all.deb
 ```
 
 Именно `apt`, а не `dpkg -i`: он сам подтянет зависимости.
