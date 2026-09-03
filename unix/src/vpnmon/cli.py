@@ -22,7 +22,11 @@ def _cmd_list():
     targets = vpn.list_targets()
     if not targets:
         print("VPN-подключений не найдено.")
-        print("Ищутся интерфейсы wg*/tun*/tap*/ppp* и подключения NetworkManager.")
+        if sys.platform == "darwin":
+            print("Ищутся службы из «Системных настроек» (scutil --nc)")
+            print("и интерфейсы utun с назначенным адресом.")
+        else:
+            print("Ищутся интерфейсы wg*/tun*/tap*/ppp* и подключения NetworkManager.")
         return 1
 
     print("Найденные подключения (значение для VpnTarget в конфиге):")
@@ -97,8 +101,25 @@ def _cmd_daemon():
 
 
 def _cmd_tray(open_settings):
+    if sys.platform == "darwin":
+        try:
+            from . import tray_macos
+        except (ImportError, ValueError) as exc:
+            print("Не удалось загрузить значок строки меню: %s" % exc, file=sys.stderr)
+            print("Нужен PyObjC — он входит в состав системного python3,", file=sys.stderr)
+            print("который ставится вместе с Command Line Tools:", file=sys.stderr)
+            print("    xcode-select --install", file=sys.stderr)
+            print("Либо запустите фоновый режим:  %s --daemon" % APP_ID, file=sys.stderr)
+            return 2
+
+        try:
+            tray_macos.run(open_settings=open_settings)
+        except KeyboardInterrupt:
+            pass
+        return 0
+
     try:
-        from .tray import TrayApp
+        from .tray_gtk import TrayApp
     except (ImportError, ValueError) as exc:
         print("Не удалось загрузить графическую часть: %s" % exc, file=sys.stderr)
         print("Установите python3-gi и gir1.2-ayatanaappindicator3-0.1,", file=sys.stderr)
