@@ -30,17 +30,37 @@ mkdir -p "$root/lib/vpnmon" "$root/bin"
 cp "$here/src/vpnmon/"*.py "$root/lib/vpnmon/"
 
 cat > "$root/bin/$package" <<'LAUNCHER'
-#!/usr/bin/env python3
-"""Запуск установленной копии."""
-import os
-import sys
+#!/bin/sh
+#
+# Запуск установленной копии.
+#
+# Интерпретатор выбирается не через `env python3`, а перебором: значок
+# в строке меню требует PyObjC, а он есть только в системном
+# /usr/bin/python3. Если в PATH первым стоит питон из Homebrew или pyenv
+# — а так бывает часто — PyObjC там отсутствует, и значок не поднимется.
+#
+# Порядок: сначала любой питон, где PyObjC действительно импортируется,
+# затем системный, затем что найдётся. Режимы --daemon, --list и --report
+# работают без PyObjC, поэтому запуск не блокируем.
 
-here = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(here), "lib"))
+here=$(cd "$(dirname "$0")" && pwd)
+lib=$(dirname "$here")/lib
+export PYTHONPATH="$lib${PYTHONPATH:+:$PYTHONPATH}"
 
-from vpnmon.cli import main
+for py in /usr/bin/python3 python3 python3.13 python3.12 python3.11; do
+    if command -v "$py" >/dev/null 2>&1 && "$py" -c 'import objc' >/dev/null 2>&1; then
+        exec "$py" -m vpnmon "$@"
+    fi
+done
 
-sys.exit(main())
+for py in /usr/bin/python3 python3; do
+    if command -v "$py" >/dev/null 2>&1; then
+        exec "$py" -m vpnmon "$@"
+    fi
+done
+
+echo "python3 не найден." >&2
+exit 127
 LAUNCHER
 chmod 755 "$root/bin/$package"
 

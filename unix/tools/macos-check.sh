@@ -37,16 +37,23 @@ sw_vers 2>/dev/null || echo "sw_vers недоступен"
 echo "arch: $(uname -m)"
 
 line "Python и PyObjC"
-echo "python3: $(command -v python3 || echo 'НЕ НАЙДЕН')"
-python3 --version 2>&1
-python3 - <<'PY' 2>&1
-try:
-    import objc
-    import AppKit
-    print("PyObjC: есть, objc %s" % getattr(objc, "__version__", "?"))
-except Exception as exc:
-    print("PyObjC: НЕТ -> %s: %s" % (type(exc).__name__, exc))
-PY
+# Проверяем каждый найденный интерпретатор отдельно: PyObjC входит только
+# в системный /usr/bin/python3, а в PATH часто первым стоит Homebrew или
+# pyenv, где его нет.
+for py in /usr/bin/python3 "$(command -v python3 2>/dev/null)" \
+          "$(command -v python3.13 2>/dev/null)" "$(command -v python3.12 2>/dev/null)"; do
+    [ -n "$py" ] && [ -x "$py" ] || continue
+    ver="$("$py" --version 2>&1)"
+    if "$py" -c 'import objc, AppKit' >/dev/null 2>&1; then
+        objc_state="PyObjC ЕСТЬ"
+    else
+        objc_state="PyObjC нет"
+    fi
+    printf '  %-28s %-16s %s\n' "$py" "$ver" "$objc_state"
+done | sort -u
+
+echo
+echo "  какой выбирает PATH: $(command -v python3 || echo 'НЕ НАЙДЕН')"
 
 line "Внешние утилиты"
 for cmd in scutil ifconfig osascript afplay terminal-notifier open launchctl; do

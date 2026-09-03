@@ -106,10 +106,18 @@ def _cmd_tray(open_settings):
             from . import tray_macos
         except (ImportError, ValueError) as exc:
             print("Не удалось загрузить значок строки меню: %s" % exc, file=sys.stderr)
-            print("Нужен PyObjC — он входит в состав системного python3,", file=sys.stderr)
-            print("который ставится вместе с Command Line Tools:", file=sys.stderr)
-            print("    xcode-select --install", file=sys.stderr)
-            print("Либо запустите фоновый режим:  %s --daemon" % APP_ID, file=sys.stderr)
+            print(file=sys.stderr)
+            print("Текущий интерпретатор: %s" % sys.executable, file=sys.stderr)
+            print("PyObjC в нём отсутствует. Он есть в системном python3,", file=sys.stderr)
+            print("но если первым в PATH стоит питон из Homebrew или pyenv,", file=sys.stderr)
+            print("берётся он — а там PyObjC нет.", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Что можно сделать:", file=sys.stderr)
+            print("  1. Поставить Command Line Tools:  xcode-select --install", file=sys.stderr)
+            print("     после этого /usr/bin/python3 подхватится автоматически;", file=sys.stderr)
+            print("  2. либо добавить PyObjC в текущий питон:", file=sys.stderr)
+            print("     %s -m pip install pyobjc-framework-Cocoa" % sys.executable, file=sys.stderr)
+            print("  3. либо обойтись без значка:  %s --daemon" % APP_ID, file=sys.stderr)
             return 2
 
         try:
