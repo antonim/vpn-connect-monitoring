@@ -83,8 +83,19 @@ echo "    $prefix/bin/vpn-connect-monitoring            # запустить"
 INSTALL
 chmod 755 "$root/install.sh"
 
+# Диагностический скрипт кладём в архив: без него человек, у которого
+# что-то не заработало, не сможет ничего внятного сообщить.
+cp "$here/tools/macos-check.sh" "$root/macos-check.sh"
+chmod 755 "$root/macos-check.sh"
+
 cat > "$root/README.txt" <<'READ'
 VPN Connect Monitoring для macOS
+
+Эта сборка НЕ ПРОВЕРЯЛАСЬ на живой macOS: разрабатывалась она на другой
+системе. Общая логика протестирована, специфика macOS — нет.
+
+Если что-то не работает, запустите диагностику и пришлите её вывод:
+    bash macos-check.sh
 
 Установка:
     ./install.sh
