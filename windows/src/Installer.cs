@@ -69,29 +69,38 @@ namespace VpnConnectMonitoring
                 {
                     using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RunKey, false))
                     {
-                        if (k == null) return false;
-                        return k.GetValue(RunValue) != null;
+                        if (k != null && k.GetValue(RunValue) != null)
+                            return true;
                     }
                 }
-                catch
-                {
-                    return false;
-                }
+                catch { }
+
+                return Shortcut.StartupEnabled;
             }
         }
 
+        // Автозапуск прописывается сразу двумя способами: ключом Run и ярлыком
+        // в папке «Автозагрузка». Это не перестраховка ради перестраховки —
+        // исправная запись в Run однажды не отработала при входе в систему,
+        // причину выяснить не удалось. Механизмы независимы, а дубль запуска
+        // безвреден: второй экземпляр с --tray завершается молча.
         public static void SetAutostart(bool enabled, string exePath)
         {
             using (RegistryKey k = Registry.CurrentUser.CreateSubKey(RunKey))
             {
-                if (k == null)
-                    return;
-
-                if (enabled)
-                    k.SetValue(RunValue, "\"" + exePath + "\" --tray");
-                else if (k.GetValue(RunValue) != null)
-                    k.DeleteValue(RunValue, false);
+                if (k != null)
+                {
+                    if (enabled)
+                        k.SetValue(RunValue, "\"" + exePath + "\" --tray");
+                    else if (k.GetValue(RunValue) != null)
+                        k.DeleteValue(RunValue, false);
+                }
             }
+
+            if (enabled)
+                Shortcut.EnsureStartup(exePath);
+            else
+                Shortcut.RemoveStartup();
         }
 
         // Копирует себя в профиль и включает автозапуск. Возвращает путь

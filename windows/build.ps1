@@ -59,16 +59,21 @@ function New-IconDib {
         $g.DrawEllipse($pen, 1.0, 1.0, $Size - 2.5, $Size - 2.5)
         $pen.Dispose()
 
-        if ($Size -ge 32) {
-            $font = New-Object System.Drawing.Font('Segoe UI', [float]($Size * 0.30), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-            $sf = New-Object System.Drawing.StringFormat
-            $sf.Alignment = [System.Drawing.StringAlignment]::Center
-            $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
-            $rect = New-Object System.Drawing.RectangleF(0, ($Size * 0.03), $Size, $Size)
-            $g.DrawString('VPN', $font, [System.Drawing.Brushes]::White, $rect, $sf)
-            $sf.Dispose()
-            $font.Dispose()
-        }
+        # Галочка вместо надписи: «VPN» шрифтом, читаемым в мелких размерах,
+        # в кружок не помещается и переносится на две строки. Форма совпадает
+        # со значком «связь есть» в трее — см. Icons.cs.
+        $k = $Size / 32.0
+        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::White, [float](4 * $k))
+        $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+        $points = @(
+            (New-Object System.Drawing.PointF([float](9 * $k), [float](16.5 * $k))),
+            (New-Object System.Drawing.PointF([float](14 * $k), [float](21.5 * $k))),
+            (New-Object System.Drawing.PointF([float](23 * $k), [float](11 * $k)))
+        )
+        $g.DrawLines($pen, [System.Drawing.PointF[]]$points)
+        $pen.Dispose()
 
         $rect = New-Object System.Drawing.Rectangle(0, 0, $Size, $Size)
         $locked = $bmp.LockBits($rect,

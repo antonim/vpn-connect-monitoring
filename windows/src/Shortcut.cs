@@ -26,12 +26,54 @@ namespace VpnConnectMonitoring
             }
         }
 
+        // Ярлык в папке «Автозагрузка». Дублирует ключ Run намеренно:
+        // однажды исправная запись в Run не отработала при входе в систему,
+        // причину установить не удалось. Папка «Автозагрузка» опирается на
+        // другой механизм и, в отличие от реестра, видна пользователю в
+        // Проводнике и в Диспетчере задач — то есть отказ будет заметен.
+        //
+        // Двойного запуска бояться не нужно: приложение однооконное, а второй
+        // экземпляр с --tray завершается молча.
+        public static string StartupPath
+        {
+            get
+            {
+                return System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Startup),
+                    FileName);
+            }
+        }
+
         // Создаёт или обновляет ярлык на указанный exe. Идемпотентна.
         public static void Ensure(string exePath)
         {
+            Write(Path_, exePath, "ярлык в «Пуске»");
+        }
+
+        public static void EnsureStartup(string exePath)
+        {
+            Write(StartupPath, exePath, "ярлык в «Автозагрузке»");
+        }
+
+        public static bool StartupEnabled
+        {
+            get { return File.Exists(StartupPath); }
+        }
+
+        public static void RemoveStartup()
+        {
             try
             {
-                string lnk = Path_;
+                if (File.Exists(StartupPath))
+                    File.Delete(StartupPath);
+            }
+            catch { }
+        }
+
+        static void Write(string lnk, string exePath, string what)
+        {
+            try
+            {
                 string dir = System.IO.Path.GetDirectoryName(lnk);
                 if (dir != null)
                     Directory.CreateDirectory(dir);
@@ -61,11 +103,11 @@ namespace VpnConnectMonitoring
                 }
 
                 ((IPersistFile)shellLink).Save(lnk, true);
-                Log.Write("Shortcut: ярлык обновлён -> " + lnk + " (цель " + exePath + ")");
+                Log.Write("Shortcut: " + what + " обновлён -> " + lnk);
             }
             catch (Exception ex)
             {
-                Log.Write("Shortcut: не удалось создать ярлык — " + ex.Message);
+                Log.Write("Shortcut: не удалось создать " + what + " — " + ex.Message);
             }
         }
 

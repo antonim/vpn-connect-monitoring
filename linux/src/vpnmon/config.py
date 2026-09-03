@@ -19,7 +19,7 @@ _FALSE = ("0", "false", "no", "нет", "off")
 
 class Config:
     def __init__(self):
-        self.vpn_target = ""          # см. vpn.py: "iface:wg0" или "nm:AVIA"
+        self.vpn_target = ""          # см. vpn.py: "iface:wg0" или "nm:office-vpn"
         self.enabled = True
         self.interval_seconds = 60
         self.work_start_minutes = 9 * 60

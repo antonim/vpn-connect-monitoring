@@ -244,7 +244,13 @@ namespace VpnConnectMonitoring
             cbVpn.Items.Clear();
             for (int i = 0; i < entries.Count; i++)
                 cbVpn.Items.Add(entries[i]);
-            cbVpn.Text = config.VpnName;
+
+            // При первом запуске подключение не выбрано. Если оно в системе
+            // всего одно, подставляем его: угадывать тут не из чего.
+            if (string.IsNullOrEmpty(config.VpnName) && entries.Count == 1)
+                cbVpn.Text = entries[0];
+            else
+                cbVpn.Text = config.VpnName;
 
             dtStart.Value = DateTime.Today.AddMinutes(config.WorkStartMinutes);
             dtEnd.Value = DateTime.Today.AddMinutes(config.WorkEndMinutes);

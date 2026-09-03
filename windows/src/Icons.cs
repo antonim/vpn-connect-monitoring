@@ -20,29 +20,35 @@ namespace VpnConnectMonitoring
         // насыщенный серый там спорит с красным и зелёным за внимание.
         public static readonly Color IdleBand = Color.FromArgb(210, 214, 220);
 
-        public static Icon Create(Color fill)
+        public enum Glyph
+        {
+            Check,   // связь есть
+            Bang,    // связи нет
+            Dash     // не наблюдается
+        }
+
+        // Состояние различается и цветом, и формой. Только цвета мало: значок
+        // в трее отрисовывается примерно в 16 пикселей, а красный и зелёный
+        // одинаковой яркости неразличимы при дальтонизме.
+        //
+        // Надписи здесь принципиально нет: «VPN» шрифтом, читаемым на 16 px,
+        // в кружок не влезает и переносится на две строки.
+        public static Icon Create(Color fill, Glyph glyph)
         {
             using (Bitmap bmp = new Bitmap(32, 32))
             {
                 using (Graphics g = Graphics.FromImage(bmp))
                 {
                     g.SmoothingMode = SmoothingMode.AntiAlias;
-                    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
                     g.Clear(Color.Transparent);
 
                     using (SolidBrush b = new SolidBrush(fill))
                         g.FillEllipse(b, 1, 1, 30, 30);
 
-                    using (Pen p = new Pen(Color.FromArgb(70, 0, 0, 0), 2f))
-                        g.DrawEllipse(p, 2, 2, 28, 28);
+                    using (Pen p = new Pen(Color.FromArgb(70, 0, 0, 0), 1.5f))
+                        g.DrawEllipse(p, 1.5f, 1.5f, 29, 29);
 
-                    using (Font f = new Font("Segoe UI", 15f, FontStyle.Bold, GraphicsUnit.Pixel))
-                    using (StringFormat sf = new StringFormat())
-                    {
-                        sf.Alignment = StringAlignment.Center;
-                        sf.LineAlignment = StringAlignment.Center;
-                        g.DrawString("VPN", f, Brushes.White, new RectangleF(0, 1, 32, 32), sf);
-                    }
+                    DrawGlyph(g, glyph);
                 }
 
                 IntPtr h = bmp.GetHicon();
@@ -56,6 +62,38 @@ namespace VpnConnectMonitoring
                 finally
                 {
                     DestroyIcon(h);
+                }
+            }
+        }
+
+        static void DrawGlyph(Graphics g, Glyph glyph)
+        {
+            using (Pen pen = new Pen(Color.White, 4f))
+            {
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                pen.LineJoin = LineJoin.Round;
+
+                switch (glyph)
+                {
+                    case Glyph.Check:
+                        g.DrawLines(pen, new PointF[] {
+                            new PointF(9f, 16.5f),
+                            new PointF(14f, 21.5f),
+                            new PointF(23f, 11f),
+                        });
+                        break;
+
+                    case Glyph.Bang:
+                        g.DrawLine(pen, 16f, 8.5f, 16f, 18f);
+                        // Точку рисуем заливкой: круглый колпачок линии
+                        // нулевой длины отрисовывается не везде одинаково.
+                        g.FillEllipse(Brushes.White, 13.75f, 21f, 4.5f, 4.5f);
+                        break;
+
+                    case Glyph.Dash:
+                        g.DrawLine(pen, 10f, 16f, 22f, 16f);
+                        break;
                 }
             }
         }

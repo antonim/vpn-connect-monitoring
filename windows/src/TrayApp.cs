@@ -37,11 +37,13 @@ namespace VpnConnectMonitoring
 
             Notifier.EnsureRegistered();
             Shortcut.Ensure(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            if (Installer.AutostartEnabled)
+                Shortcut.EnsureStartup(Installer.TargetExe);
             History.Prune();
 
-            iconOk = Icons.Create(Icons.Ok);
-            iconAlarm = Icons.Create(Icons.Alarm);
-            iconIdle = Icons.Create(Icons.Idle);
+            iconOk = Icons.Create(Icons.Ok, Icons.Glyph.Check);
+            iconAlarm = Icons.Create(Icons.Alarm, Icons.Glyph.Bang);
+            iconIdle = Icons.Create(Icons.Idle, Icons.Glyph.Dash);
 
             ContextMenuStrip menu = new ContextMenuStrip();
 
@@ -246,6 +248,16 @@ namespace VpnConnectMonitoring
             if (!config.Enabled)
             {
                 SetState(iconIdle, "Наблюдение выключено");
+                History.Record(now, VpnState.Unknown);
+                return;
+            }
+
+            // До первой настройки подключение не выбрано. Без этой проверки
+            // пустое имя дало бы «не подключён» и сигнал тревоги каждую
+            // минуту — на пустом месте.
+            if (string.IsNullOrEmpty(config.VpnName))
+            {
+                SetState(iconIdle, "VPN-подключение не выбрано");
                 History.Record(now, VpnState.Unknown);
                 return;
             }

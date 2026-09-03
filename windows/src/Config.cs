@@ -22,7 +22,10 @@ namespace VpnConnectMonitoring
 
         public Config()
         {
-            VpnName = "AVIA";
+            // Пусто: конкретное подключение выбирает пользователь при первом
+            // запуске. Подставлять сюда чьё-то имя нельзя — программа не
+            // привязана ни к какому VPN.
+            VpnName = "";
             Enabled = true;
             IntervalSeconds = 60;
             WorkStartMinutes = 9 * 60;
