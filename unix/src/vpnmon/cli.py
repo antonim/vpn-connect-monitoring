@@ -46,12 +46,13 @@ def _cmd_report(path, open_it):
         import shutil
         import subprocess
 
-        opener = shutil.which("xdg-open")
+        # На macOS открывает `open`, на Linux — `xdg-open`.
+        opener = shutil.which("open" if sys.platform == "darwin" else "xdg-open")
         if opener:
             subprocess.Popen([opener, written],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            print("xdg-open не найден — откройте файл вручную.")
+            print("Нечем открыть файл — откройте его вручную.")
     return 0
 
 
@@ -108,16 +109,16 @@ def _cmd_tray(open_settings):
             print("Не удалось загрузить значок строки меню: %s" % exc, file=sys.stderr)
             print(file=sys.stderr)
             print("Текущий интерпретатор: %s" % sys.executable, file=sys.stderr)
-            print("PyObjC в нём отсутствует. Он есть в системном python3,", file=sys.stderr)
-            print("но если первым в PATH стоит питон из Homebrew или pyenv,", file=sys.stderr)
-            print("берётся он — а там PyObjC нет.", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Значку нужен AppKit, который вызывается через ctypes из", file=sys.stderr)
+            print("стандартной библиотеки. Сторонних пакетов ставить не нужно —", file=sys.stderr)
+            print("такая ошибка означает, что не загрузился сам фреймворк.", file=sys.stderr)
             print(file=sys.stderr)
             print("Что можно сделать:", file=sys.stderr)
-            print("  1. Поставить Command Line Tools:  xcode-select --install", file=sys.stderr)
-            print("     после этого /usr/bin/python3 подхватится автоматически;", file=sys.stderr)
-            print("  2. либо добавить PyObjC в текущий питон:", file=sys.stderr)
-            print("     %s -m pip install pyobjc-framework-Cocoa" % sys.executable, file=sys.stderr)
-            print("  3. либо обойтись без значка:  %s --daemon" % APP_ID, file=sys.stderr)
+            print("  1. запустить диагностику:  bash macos-check.sh", file=sys.stderr)
+            print("  2. проверить, что python3 не урезанный: сборки без ctypes", file=sys.stderr)
+            print("     встречаются в контейнерах и у некоторых менеджеров версий;", file=sys.stderr)
+            print("  3. обойтись без значка:  %s --daemon" % APP_ID, file=sys.stderr)
             return 2
 
         try:

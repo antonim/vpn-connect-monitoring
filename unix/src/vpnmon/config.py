@@ -122,13 +122,29 @@ class Config:
 
         return cfg
 
-    def save(self):
+    def save(self, extra_comment=None):
+        """Записать настройки.
+
+        extra_comment попадает в шапку файла закомментированным блоком.
+        Нужен при первом запуске: человеку, открывшему конфиг впервые,
+        неоткуда узнать, что вписывать в VpnTarget, поэтому туда
+        подставляется список найденных подключений.
+        """
         os.makedirs(CONFIG_DIR, exist_ok=True)
         days = ",".join("1" if d else "0" for d in self.days)
 
-        text = (
+        header = (
             "# VPN Connect Monitoring — настройки\n"
             "# Изменения проще делать через окно настроек приложения.\n"
+        )
+        if extra_comment:
+            header += "#\n" + "".join(
+                "# %s\n" % line if line else "#\n"
+                for line in extra_comment.splitlines()
+            )
+
+        text = (
+            "%s"
             "\n"
             "VpnTarget=%s\n"
             "Enabled=%s\n"
@@ -140,6 +156,7 @@ class Config:
             "SoundEnabled=%s\n"
             "Days=%s\n"
         ) % (
+            header,
             self.vpn_target,
             "1" if self.enabled else "0",
             self.interval_seconds,

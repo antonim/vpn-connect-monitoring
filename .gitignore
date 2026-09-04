@@ -10,3 +10,7 @@ build/
 linux/build/
 __pycache__/
 *.pyc
+
+# Настройки IDE от JetBrains: к проекту отношения не имеют, у каждого
+# разработчика свои.
+.idea/
