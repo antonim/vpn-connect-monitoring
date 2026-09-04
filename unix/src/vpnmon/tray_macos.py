@@ -150,6 +150,10 @@ class MenuBarApp(object):
         self.next_check = 0.0
 
         history.prune()
+        # Пакет надо зарегистрировать до первого уведомления, иначе оно
+        # придёт от имени «Python»: центр уведомлений берёт имя
+        # и значок у зарегистрированного приложения.
+        notify.prepare()
 
         _controller = self
         self.target = _target()

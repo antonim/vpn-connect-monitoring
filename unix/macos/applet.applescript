@@ -14,5 +14,9 @@
 on run
 	set here to POSIX path of (path to me)
 	set launcher to quoted form of (here & "Contents/Resources/launcher")
-	do shell script "/usr/bin/nohup " & launcher & " > /dev/null 2>&1 &"
+	-- --tray обязателен: без него программа считает запуск первым
+	-- и открывает файл настроек, а двойной щелчок и автозапуск должны
+	-- просто поднимать значок. Первый запуск она распознаёт сама,
+	-- по отсутствию конфига.
+	do shell script "/usr/bin/nohup " & launcher & " --tray > /dev/null 2>&1 &"
 end run

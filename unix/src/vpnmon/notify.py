@@ -19,9 +19,11 @@ macOS: сначала пробуем показать уведомление с�
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
+import threading
 
 from . import bundle_path
 
@@ -32,6 +34,7 @@ ICON_OK = "network-vpn-symbolic"
 # Идентификатор пакета .app. Тот же, что в Info.plist и в имени
 # LaunchAgent: центр уведомлений по нему находит имя и значок.
 BUNDLE_ID = "io.github.antonim.vpn-connect-monitoring"
+BUNDLE_NAME = "VPN Connect Monitoring.app"
 
 IS_MACOS = sys.platform == "darwin"
 
@@ -113,6 +116,51 @@ def _register_bundle():
         pass
 
 
+def _prune_stale_registrations():
+    """Снять с регистрации копии пакета, которых больше нет на диске.
+
+    Установка с образа диска оставляет запись о копии, лежавшей на самом
+    образе. После извлечения образа путь исчезает, а запись остаётся, и
+    центр уведомлений, выбирая среди копий с одним идентификатором,
+    попадает на мёртвую. Уведомления после этого приходят от имени
+    «Python» — молча и без единой ошибки. Тот же след остаётся от
+    обновления, когда прежнюю версию убрали мимо Корзины.
+
+    Снимаются только записи о нашем пакете и только те, чьих файлов
+    больше нет: живые копии, включая лежащие в Корзине, не трогаем —
+    решать их судьбу не наше дело.
+
+    Выгрузка базы занимает несколько секунд, поэтому вызывать это
+    следует из отдельного потока.
+    """
+    if not os.path.exists(LSREGISTER):
+        return
+
+    try:
+        dump = subprocess.run(
+            [LSREGISTER, "-dump"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=120, universal_newlines=True,
+        ).stdout or ""
+    except (OSError, subprocess.SubprocessError):
+        return
+
+    for line in dump.splitlines():
+        if not line.startswith("path:"):
+            continue
+        # Строка вида "path:  /Applications/…app (0x1d728)" — хвост
+        # с внутренним номером записи к пути не относится.
+        path = re.sub(r"\s+\(0x[0-9a-f]+\)$", "", line[len("path:"):].strip())
+        if not path.endswith(BUNDLE_NAME) or os.path.exists(path):
+            continue
+        try:
+            subprocess.run([LSREGISTER, "-u", path],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
 def _native_center():
     """Центр уведомлений AppKit или None, если путь недоступен.
 
@@ -127,6 +175,10 @@ def _native_center():
         from . import objc_bridge
 
         _register_bundle()
+        # Уборка мёртвых записей идёт фоном: она требует выгрузки всей
+        # базы LaunchServices, а это несколько секунд, и держать из-за
+        # неё первое уведомление незачем.
+        threading.Thread(target=_prune_stale_registrations, daemon=True).start()
         objc_bridge.set_bundle_identifier(BUNDLE_ID)
         center = objc_bridge.msg(
             objc_bridge.cls("NSUserNotificationCenter"), "defaultUserNotificationCenter"
@@ -187,6 +239,20 @@ def _show_macos(title, text, critical):
         _applescript_quote(title),
     )
     return _spawn([exe, "-e", script])
+
+
+def prepare():
+    """Подготовить доставку заранее, не дожидаясь первого уведомления.
+
+    Регистрирует пакет и запускает уборку мёртвых записей. Вызывать
+    при старте: иначе первое же уведомление — а это, скорее всего,
+    сообщение об обрыве — уйдёт до того, как система разберётся,
+    от чьего имени его показывать.
+
+    На системах, кроме macOS, ничего не делает.
+    """
+    if IS_MACOS:
+        _native_center()
 
 
 def backend():
