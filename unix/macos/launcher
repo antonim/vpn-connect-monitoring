@@ -1,0 +1,76 @@
+#!/bin/sh
+#
+# Запуск программы. Один и тот же скрипт лежит в двух местах:
+#
+#   архив:  <корень>/bin/vpn-connect-monitoring,   код в <корень>/lib
+#   пакет:  Contents/Resources/vpn-connect-monitoring, код в Contents/Resources/lib
+#
+# Раскладка разная, поэтому каталог с кодом ищется, а не вычисляется
+# из пути скрипта: вычисление молча даёт «No module named vpnmon»,
+# когда файл кладут в другое место.
+#
+# Интерпретатор тоже выбирается перебором, а не через `env python3`,
+# по двум причинам. Первая: /usr/bin/python3 на macOS без Command Line
+# Tools — это заглушка, которая при вызове открывает окно установки
+# на полтора гигабайта; трогать её, не убедившись, что инструменты
+# стоят, нельзя. Вторая: приложение, запущенное из Finder или
+# автозапуска, получает урезанный PATH, и питона из Homebrew в нём
+# не видно — его путь приходится знать заранее.
+#
+# Сторонних библиотек не требуется: значок в строке меню и уведомления
+# работают на ctypes, см. objc_bridge.py.
+
+here=$(cd "$(dirname "$0")" && pwd)
+
+lib=""
+for candidate in "$here/lib" "$(dirname "$here")/lib"; do
+    if [ -d "$candidate/vpnmon" ]; then
+        lib="$candidate"
+        break
+    fi
+done
+
+# Из двойного щелчка поток ошибок никто не увидит, поэтому о поломке
+# сообщаем окном. В терминале, наоборот, окно было бы навязчивым.
+fail() {
+    if [ -t 2 ]; then
+        printf '%s\n' "$@" >&2
+    else
+        osascript -e "display alert \"VPN Connect Monitoring\" message \"$1\" as critical" \
+            >/dev/null 2>&1
+    fi
+    exit 127
+}
+
+if [ -z "$lib" ]; then
+    fail "Не найден каталог с кодом: рядом со скриптом нет lib/vpnmon.
+Пакет приложения повреждён — установите программу заново." \
+         "Искали в: $here/lib и $(dirname "$here")/lib"
+fi
+
+export PYTHONPATH="$lib${PYTHONPATH:+:$PYTHONPATH}"
+
+for py in /opt/homebrew/bin/python3 /usr/local/bin/python3 "$(command -v python3 2>/dev/null)"; do
+    [ -n "$py" ] && [ -x "$py" ] || continue
+    [ "$py" = /usr/bin/python3 ] && continue
+    if "$py" -c 'import ctypes' >/dev/null 2>&1; then
+        exec "$py" -m vpnmon "$@"
+    fi
+done
+
+# Системный питон берём последним и только при установленных Command
+# Line Tools — иначе вместо программы человек получит окно загрузки.
+if xcode-select -p >/dev/null 2>&1 && [ -x /usr/bin/python3 ]; then
+    if /usr/bin/python3 -c 'import ctypes' >/dev/null 2>&1; then
+        exec /usr/bin/python3 -m vpnmon "$@"
+    fi
+fi
+
+fail "На этом компьютере не найден python3.
+
+Установите его одним из способов:
+  • выполните в Терминале:  xcode-select --install
+  • или скачайте с python.org/downloads/macos
+
+После установки запустите программу ещё раз." \
+     "Не найден python3. Поставьте его: xcode-select --install"
