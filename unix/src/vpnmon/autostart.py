@@ -15,7 +15,7 @@ import subprocess
 import sys
 import xml.sax.saxutils
 
-from . import APP_ID, APP_TITLE
+from . import APP_ID, APP_TITLE, bundle_path
 
 IS_MACOS = sys.platform == "darwin"
 
@@ -31,14 +31,34 @@ LAUNCH_AGENTS_DIR = os.path.expanduser("~/Library/LaunchAgents")
 PLIST_PATH = os.path.join(LAUNCH_AGENTS_DIR, LABEL + ".plist")
 
 
+def _bundle_launcher():
+    """Запускающий файл внутри .app, если программа работает из него.
+
+    Для автозапуска это лучший вариант из возможных: путь не зависит
+    ни от PATH, ни от того, какой интерпретатор окажется первым, а сам
+    пакет человек может перенести в «Программы» и не думать о нём.
+    """
+    bundle = bundle_path()
+    if not bundle:
+        return None
+
+    launcher = os.path.join(bundle, "Contents", "MacOS", APP_ID)
+    return launcher if os.path.exists(launcher) else None
+
+
 def _command_parts():
     """Пара (аргументы запуска, каталог для PYTHONPATH или None).
 
-    После установки пакета это /usr/bin/vpn-connect-monitoring (Linux) или
-    /usr/local/bin/vpn-connect-monitoring (macOS), и PYTHONPATH не нужен.
-    При запуске из исходников подставляем текущий интерпретатор и путь
-    к пакету, чтобы автозапуск работал и до сборки.
+    Порядок: запускающий файл .app, затем установленная в PATH команда,
+    затем текущий интерпретатор с путём к пакету — последнее нужно,
+    чтобы автозапуск работал и при запуске прямо из распакованного
+    архива, до всякой установки.
     """
+    if IS_MACOS:
+        launcher = _bundle_launcher()
+        if launcher:
+            return [launcher, "--tray"], None
+
     installed = shutil.which(APP_ID)
     if installed:
         return [installed, "--tray"], None

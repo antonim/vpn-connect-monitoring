@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# Запуск установленной копии.
+#
+# Интерпретатор выбирается перебором, а не через `env python3`, по двум
+# причинам. Первая: /usr/bin/python3 на macOS без Command Line Tools —
+# это заглушка, которая при вызове открывает окно установки на полтора
+# гигабайта; трогать её, не убедившись, что инструменты стоят, нельзя.
+# Вторая: при запуске из автозапуска PATH урезан до системного, и
+# питона из Homebrew в нём не видно — его путь приходится знать заранее.
+#
+# Сторонних библиотек не требуется: значок в строке меню работает
+# на ctypes, см. lib/vpnmon/objc_bridge.py.
+
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$here")
+export PYTHONPATH="$root/lib${PYTHONPATH:+:$PYTHONPATH}"
+
+for py in /opt/homebrew/bin/python3 /usr/local/bin/python3 "$(command -v python3 2>/dev/null)"; do
+    [ -n "$py" ] && [ -x "$py" ] || continue
+    [ "$py" = /usr/bin/python3 ] && continue
+    if "$py" -c 'import ctypes' >/dev/null 2>&1; then
+        exec "$py" -m vpnmon "$@"
+    fi
+done
+
+# Системный питон берём последним и только при установленных Command
+# Line Tools — иначе вместо программы человек получит окно загрузки.
+if xcode-select -p >/dev/null 2>&1 && [ -x /usr/bin/python3 ]; then
+    if /usr/bin/python3 -c 'import ctypes' >/dev/null 2>&1; then
+        exec /usr/bin/python3 -m vpnmon "$@"
+    fi
+fi
+
+echo "Не найден python3." >&2
+echo >&2
+echo "Поставьте его любым из способов:" >&2
+echo "    xcode-select --install                 # инструменты Apple" >&2
+echo "    brew install python3                   # если есть Homebrew" >&2
+echo "    https://www.python.org/downloads/macos/" >&2
+exit 127

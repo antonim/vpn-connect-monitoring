@@ -1,11 +1,18 @@
 #!/bin/bash
 #
-# Сборка архива для macOS: vpn-connect-monitoring-<версия>-macos.tar.gz
+# Сборка для macOS: образ диска и архив.
 #
-# Внутри — код, launcher и install.sh, который раскладывает всё в ~/.local
-# и не требует sudo. Формат выбран вместо .pkg сознательно: pkgbuild есть
-# только на macOS, а архив собирается где угодно, в том числе в CI.
-# Кому нужен именно .pkg — см. build-pkg.sh, он запускается на Mac.
+#   vpn-connect-monitoring-<версия>-macos.dmg      основной способ раздачи
+#   vpn-connect-monitoring-<версия>-macos.tar.gz   для тех, кто в терминале
+#
+# В образе — приложение и ярлык «Программы» рядом: человек перетаскивает
+# одно в другое. Всё для терминала убрано в подпапку, чтобы в главном окне
+# лежали две вещи, между которыми перетаскивают.
+#
+# ВАЖНО: скрипт работает только на macOS, в отличие от build-deb.sh.
+# Пакет .app требует osacompile, codesign, sips, iconutil и hdiutil —
+# все они входят в macOS, но нигде больше их нет. Собрать macOS-сборку
+# в линуксовом CI больше нельзя.
 #
 # Использование:  ./build-macos.sh [каталог-вывода]
 
@@ -15,126 +22,163 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 outdir="${1:-$here/build}"
 
 package="vpn-connect-monitoring"
+app="VPN Connect Monitoring.app"
+
 version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$here/src/vpnmon/__init__.py")"
 if [ -z "$version" ]; then
     echo "Не удалось прочитать версию из src/vpnmon/__init__.py" >&2
     exit 1
 fi
 
+for tool in osacompile codesign hdiutil sips iconutil; do
+    command -v "$tool" >/dev/null \
+        || { echo "нет $tool — сборка возможна только на macOS" >&2; exit 1; }
+done
+
 staging="$(mktemp -d)"
-trap 'rm -rf "$staging"' EXIT
+dmgstage=""
+trap 'rm -rf "$staging" "$dmgstage"' EXIT
 
 root="$staging/$package-$version"
-mkdir -p "$root/lib/vpnmon" "$root/bin"
+mkdir -p "$root/bin" "$root/lib"
 
-cp "$here/src/vpnmon/"*.py "$root/lib/vpnmon/"
+copy_package() {
+    # Кэш байт-кода привязан к версии питона сборочной машины, а .DS_Store
+    # к раздаче отношения не имеет — в архив не попадает ни то, ни другое.
+    rsync -a --exclude '__pycache__' --exclude '.DS_Store' \
+        "$here/src/vpnmon/" "$1/vpnmon/"
+}
 
-cat > "$root/bin/$package" <<'LAUNCHER'
-#!/bin/sh
+# В README номер версии стоит в примерах команд — подставляем его при
+# сборке, чтобы не забыть обновить руками.
 #
-# Запуск установленной копии.
-#
-# Интерпретатор выбирается не через `env python3`, а перебором: значок
-# в строке меню требует PyObjC, а он есть только в системном
-# /usr/bin/python3. Если в PATH первым стоит питон из Homebrew или pyenv
-# — а так бывает часто — PyObjC там отсутствует, и значок не поднимется.
-#
-# Порядок: сначала любой питон, где PyObjC действительно импортируется,
-# затем системный, затем что найдётся. Режимы --daemon, --list и --report
-# работают без PyObjC, поэтому запуск не блокируем.
+# Проверка не лишняя: если README случайно заменят копией из собранного
+# архива, подстановка исчезнет вместе с ней, и в новой сборке останется
+# чужой номер версии — молча и незаметно.
+grep -q '@VERSION@' "$here/macos/README.txt" \
+    || { echo "в macos/README.txt нет @VERSION@ — версия зашита намертво" >&2; exit 1; }
+sed "s/@VERSION@/$version/g" "$here/macos/README.txt" > "$root/README.txt"
 
-here=$(cd "$(dirname "$0")" && pwd)
-lib=$(dirname "$here")/lib
-export PYTHONPATH="$lib${PYTHONPATH:+:$PYTHONPATH}"
-
-for py in /usr/bin/python3 python3 python3.13 python3.12 python3.11; do
-    if command -v "$py" >/dev/null 2>&1 && "$py" -c 'import objc' >/dev/null 2>&1; then
-        exec "$py" -m vpnmon "$@"
-    fi
-done
-
-for py in /usr/bin/python3 python3; do
-    if command -v "$py" >/dev/null 2>&1; then
-        exec "$py" -m vpnmon "$@"
-    fi
-done
-
-echo "python3 не найден." >&2
-exit 127
-LAUNCHER
-chmod 755 "$root/bin/$package"
-
-cat > "$root/install.sh" <<'INSTALL'
-#!/bin/bash
-#
-# Установка в ~/.local — без sudo и без записи в системные каталоги.
-
-set -euo pipefail
-
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-prefix="${PREFIX:-$HOME/.local}"
-
-echo "Установка в $prefix"
-
-mkdir -p "$prefix/lib" "$prefix/bin"
-rm -rf "$prefix/lib/vpnmon"
-cp -R "$here/lib/vpnmon" "$prefix/lib/vpnmon"
-cp "$here/bin/vpn-connect-monitoring" "$prefix/bin/"
-chmod 755 "$prefix/bin/vpn-connect-monitoring"
-
-echo "Готово."
-
-case ":$PATH:" in
-    *":$prefix/bin:"*)
-        ;;
-    *)
-        echo
-        echo "ВНИМАНИЕ: $prefix/bin отсутствует в PATH."
-        echo "Чтобы команда была доступна в терминале, добавьте в ~/.zshrc:"
-        echo "    export PATH=\"\$PATH:$prefix/bin\""
-        echo "На автозапуск это не влияет — он использует полный путь."
-        ;;
-esac
-
-echo
-echo "Дальше:"
-echo "    $prefix/bin/vpn-connect-monitoring --list     # посмотреть подключения"
-echo "    $prefix/bin/vpn-connect-monitoring            # запустить"
-INSTALL
-chmod 755 "$root/install.sh"
-
-# Диагностический скрипт кладём в архив: без него человек, у которого
-# что-то не заработало, не сможет ничего внятного сообщить.
+cp "$here/macos/install.sh" "$root/install.sh"
 cp "$here/tools/macos-check.sh" "$root/macos-check.sh"
-chmod 755 "$root/macos-check.sh"
+cp "$here/macos/launcher" "$root/bin/$package"
+copy_package "$root/lib"
 
-cat > "$root/README.txt" <<'READ'
-VPN Connect Monitoring для macOS
+# --- пакет .app -----------------------------------------------------------
+#
+# Пакет строится вокруг стандартного applet'а: исполняемым файлом .app
+# обязан быть Mach-O, а не скрипт. macOS 15 приложение со скриптом на
+# этом месте не открывает вовсе — сначала предлагает поставить Rosetta,
+# не сумев определить архитектуру, потом возвращает -10669. Компилировать
+# ничего не приходится: osacompile входит в macOS и собирает пакет вокруг
+# applet'а, готового под обе архитектуры.
 
-Эта сборка НЕ ПРОВЕРЯЛАСЬ на живой macOS: разрабатывалась она на другой
-системе. Общая логика протестирована, специфика macOS — нет.
+bundle="$root/$app"
+osacompile -o "$bundle" "$here/macos/applet.applescript"
 
-Если что-то не работает, запустите диагностику и пришлите её вывод:
-    bash macos-check.sh
+contents="$bundle/Contents"
+mkdir -p "$contents/Resources/lib"
 
-Установка:
-    ./install.sh
+cp "$here/macos/launcher" "$contents/Resources/$package"
+# Имя launcher оставляем ссылкой: applet зовёт его по этому пути,
+# а понятное имя нужно тем, кто полезет внутрь пакета руками.
+ln -sf "$package" "$contents/Resources/launcher"
+copy_package "$contents/Resources/lib"
 
-Удаление:
-    rm -rf ~/.local/lib/vpnmon ~/.local/bin/vpn-connect-monitoring
-    launchctl unload -w ~/Library/LaunchAgents/io.github.antonim.vpn-connect-monitoring.plist
-    rm -f ~/Library/LaunchAgents/io.github.antonim.vpn-connect-monitoring.plist
+# Значок рисуется здесь же, а не хранится в репозитории готовым: скрипт
+# весит несколько килобайт против сотни у .icns, и рисунок не может
+# разойтись с кодом, который его создаёт.
+if python3 "$here/macos/make-icon.py" "$contents/Resources/AppIcon.icns"; then
+    rm -f "$contents/Resources/applet.icns"
+    icon_key="AppIcon"
+else
+    echo "ВНИМАНИЕ: значок собрать не удалось, останется стандартный" >&2
+    icon_key="applet"
+fi
 
-Настройки и журнал: ~/.config/vpn-connect-monitoring/
+# Info.plist берём тот, что сделал osacompile, и дописываем своё:
+# заменить его целиком нельзя — там есть ключи, без которых applet
+# не запустится.
+plist="$contents/Info.plist"
+set_plist() {  # ключ тип значение
+    plutil -replace "$1" "-$2" "$3" "$plist" 2>/dev/null \
+        || plutil -insert "$1" "-$2" "$3" "$plist"
+}
+set_plist CFBundleIdentifier         string "io.github.antonim.vpn-connect-monitoring"
+set_plist CFBundleName               string "VPN Connect Monitoring"
+set_plist CFBundleDisplayName        string "VPN Connect Monitoring"
+set_plist CFBundleVersion            string "$version"
+set_plist CFBundleShortVersionString string "$version"
+set_plist CFBundleIconFile           string "$icon_key"
+# Программа живёт в строке меню: ни значка в Dock, ни пункта
+# в переключателе приложений ей не нужно.
+set_plist LSUIElement                bool   true
+# «Предупреждения» вместо «Баннеров»: баннер гаснет сам через несколько
+# секунд, и обрыв связи легко пропустить. Ключ задаёт лишь значение по
+# умолчанию при первой регистрации — выбор человека главнее.
+set_plist NSUserNotificationAlertStyle string "alert"
 
-Требуется python3 с PyObjC — он входит в состав Command Line Tools:
-    xcode-select --install
+# osacompile проставляет минимальную версию системы по архитектурам и
+# перечисляет там один x86_64 — наследие времён, когда других вариантов
+# не было. LaunchServices читает это буквально и заключает, что для
+# arm64 приложение не годится: сначала предлагает поставить Rosetta,
+# потом отказывается запускать с ошибкой -10669. Сам applet при этом
+# собран под обе архитектуры, так что ключ просто лишний.
+plutil -remove LSMinimumSystemVersionByArchitecture "$plist" 2>/dev/null || true
 
-Подробности: https://github.com/antonim/vpn-connect-monitoring
-READ
+# Ещё osacompile вписывает объяснения для доступа к камере, контактам,
+# фотографиям и прочему, чего эта программа не касается. Оставлять их
+# нельзя: они всплывут в системных запросах приватности и будут пугать
+# человека тем, чего не происходит.
+for key in NSAppleMusicUsageDescription NSCalendarsUsageDescription \
+           NSCameraUsageDescription NSContactsUsageDescription \
+           NSHomeKitUsageDescription NSMicrophoneUsageDescription \
+           NSPhotoLibraryUsageDescription NSRemindersUsageDescription \
+           NSSiriUsageDescription NSSystemAdministrationUsageDescription; do
+    plutil -remove "$key" "$plist" 2>/dev/null || true
+done
+
+chmod 755 "$root/install.sh" "$root/macos-check.sh" "$root/bin/$package" \
+          "$contents/Resources/$package"
+find "$root" -name '.DS_Store' -delete
+
+# Правка Info.plist ломает подпись, которую ставит osacompile, а
+# приложение со сломанной подписью macOS объявляет повреждённым
+# и предлагает переместить в Корзину. Подписываем заново.
+codesign --force --deep --sign - "$bundle" 2>/dev/null
+codesign --verify "$bundle" || { echo "подпись пакета не прошла проверку" >&2; exit 1; }
+
+# --- архив ----------------------------------------------------------------
 
 mkdir -p "$outdir"
 archive="$outdir/$package-$version-macos.tar.gz"
-tar -czf "$archive" -C "$staging" "$package-$version"
+rm -f "$archive"
+# COPYFILE_DISABLE=1 — иначе bsdtar кладёт рядом с каждым файлом
+# служебные ._-файлы с ресурсными вилками.
+COPYFILE_DISABLE=1 tar -czf "$archive" -C "$staging" "$package-$version"
 
-echo "Готово: $archive ($(du -h "$archive" | cut -f1))"
+# --- образ диска ----------------------------------------------------------
+#
+# Привычный для macOS способ раздачи: двойной щелчок открывает окно,
+# где приложение перетаскивают на ярлык «Программы». Архив для этого
+# не годится — из него человеку приходится тащить пакет вручную,
+# догадываясь, куда именно.
+
+dmgstage="$(mktemp -d)"
+cp -R "$bundle" "$dmgstage/"
+ln -s /Applications "$dmgstage/Applications"
+cp "$root/README.txt" "$dmgstage/"
+
+extra="$dmgstage/Для терминала"
+mkdir "$extra"
+cp -R "$root/bin" "$root/lib" "$extra/"
+cp "$root/install.sh" "$root/macos-check.sh" "$extra/"
+
+image="$outdir/$package-$version-macos.dmg"
+rm -f "$image"
+hdiutil create -quiet -volname "VPN Connect Monitoring $version" \
+    -srcfolder "$dmgstage" -ov -format UDZO "$image"
+
+echo "Готово:"
+echo "  $image ($(du -h "$image" | cut -f1))"
+echo "  $archive ($(du -h "$archive" | cut -f1))"
