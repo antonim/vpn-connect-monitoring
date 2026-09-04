@@ -6,8 +6,6 @@ build/
 # Снимки окон от tools\render-settings.ps1
 *.png
 
-# Результаты сборки Linux-пакета
-linux/build/
 __pycache__/
 *.pyc
 
