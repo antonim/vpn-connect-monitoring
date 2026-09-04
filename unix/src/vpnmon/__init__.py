@@ -1,6 +1,6 @@
 """VPN Connect Monitoring — контроль подключения VPN в рабочее время."""
 
-__version__ = "2.2.0"
+__version__ = "2.2.2"
 
 APP_ID = "vpn-connect-monitoring"
 APP_TITLE = "VPN Connect Monitoring"
